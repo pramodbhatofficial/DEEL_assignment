@@ -19,19 +19,18 @@ SELECT global_min_invoice_date FROM {{ ref('int_global_min_invoice_date') }} LIM
 
 WITH stg_invoices_relevant AS (
     -- Step 3: Select relevant invoices and determine their contribution type (inflow/outflow)
-    -- Use payment_amount_usd for 'paid', amount_usd for 'credited'/'refunded'
     SELECT
         organization_id,
-        created_date, -- The date part of the invoice creation timestamp
+        created_date,
         status,
         CASE 
-            WHEN status = 'paid' THEN payment_amount_usd -- Use payment amount for inflows
-            WHEN status IN ('credited', 'refunded') THEN amount_usd * -1 -- Use invoice amount (negated) for outflows
-            ELSE 0 -- Ignore other statuses for balance calculation
+            WHEN status = 'paid' THEN payment_amount_usd
+            WHEN status IN ('credited', 'refunded') THEN amount_usd * -1
+            ELSE 0
         END AS daily_amount_change_usd
     FROM {{ ref('stg_invoices') }}
-    WHERE status IN ('paid', 'credited', 'refunded') -- Only consider these statuses for balance changes
-      AND CASE -- Ensure the amount used is not NULL
+    WHERE status IN ('paid', 'credited', 'refunded')
+      AND CASE 
             WHEN status = 'paid' THEN payment_amount_usd IS NOT NULL
             WHEN status IN ('credited', 'refunded') THEN amount_usd IS NOT NULL
           END
@@ -50,7 +49,7 @@ daily_net_aggregates AS (
 ),
 
 organization_first_transaction_date AS (
-    -- Step 5: Find the very first date each organization had ANY relevant transaction ('paid', 'credited', 'refunded').
+    -- Step 5: Find the very first date each organization had ANY relevant transaction.
     SELECT
         organization_id,
         MIN(transaction_date) AS first_transaction_date
@@ -59,25 +58,32 @@ organization_first_transaction_date AS (
         organization_id
 ),
 
-date_spine AS (
-    -- Step 6: Generate a continuous series of dates (the "spine").
+-- Step 6: Generate the date spine using the macro.
+-- Note: This CTE is now just the macro call. We select from it in the next CTE.
+_date_spine_source AS (
     {{ dbt_utils.date_spine(
         datepart="day",
-        start_date="to_date('" ~ start_date_for_spine_value ~ "', 'YYYY-MM-DD')", -- Uses the dynamically fetched earliest date
-        end_date="CURRENT_DATE()" -- Ensures spine goes up to the current day
+        start_date="to_date('" ~ start_date_for_spine_value ~ "', 'YYYY-MM-DD')", -- Explicit TO_DATE with fetched value
+        end_date="CURRENT_DATE()" 
     ) }}
 ),
 
+-- Step 6b: Select and cast the date from the macro output.
+date_spine AS (
+    SELECT CAST(date_day AS DATE) AS snapshot_date
+    FROM _date_spine_source
+),
+
 organization_daily_scaffold AS (
-    -- Step 7: Create the "scaffold": every org for every day from their first transaction onwards.
+    -- Step 7: Create the "scaffold".
     SELECT
-        CAST(ds.date_day AS DATE) AS snapshot_date, 
+        ds.snapshot_date, 
         oftd.organization_id
     FROM date_spine ds
     CROSS JOIN organization_first_transaction_date oftd 
     WHERE 
-        CAST(ds.date_day AS DATE) >= oftd.first_transaction_date 
-        AND CAST(ds.date_day AS DATE) <= CURRENT_DATE() 
+        ds.snapshot_date >= oftd.first_transaction_date 
+        AND ds.snapshot_date <= CURRENT_DATE() 
 ),
 
 final_dataset AS (
@@ -85,7 +91,6 @@ final_dataset AS (
     SELECT
         ods.snapshot_date,
         ods.organization_id,
-        -- Use COALESCE: If an organization had no transaction on a specific snapshot_date, the net change is 0.
         COALESCE(dna.daily_net_change_usd, 0) AS daily_net_change_usd 
     FROM organization_daily_scaffold ods
     LEFT JOIN daily_net_aggregates dna
