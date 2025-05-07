@@ -1,0 +1,90 @@
+import os
+import snowflake.connector
+from pathlib import Path
+
+# --- Configuration ---
+SNOWFLAKE_ACCOUNT = os.environ.get('SNOWFLAKE_ACCOUNT', '')
+SNOWFLAKE_USER = os.environ.get('SNOWFLAKE_USER', '')
+
+# --- Choose Authentication Method ---
+SNOWFLAKE_PASSWORD = os.environ.get('SNOWFLAKE_PASSWORD', '') # 
+
+# --- Optional Connection Parameters ---
+SNOWFLAKE_ROLE = os.environ.get('SNOWFLAKE_ROLE', '')
+SNOWFLAKE_WAREHOUSE = os.environ.get('SNOWFLAKE_WAREHOUSE', '') 
+SNOWFLAKE_DATABASE = os.environ.get('SNOWFLAKE_DATABASE', '')
+SNOWFLAKE_SCHEMA = os.environ.get('SNOWFLAKE_SCHEMA', '')
+
+
+LOCAL_CSV_FILE_PATH = '/Users/modofyai/Desktop/invoices.csv'
+
+STAGE_NAME = 'RAW_FILE_UPLOADS'
+
+def minimal_upload_to_stage(local_file_path_str, stage_name):
+    """Connects using chosen auth and uploads a local CSV file to an existing Snowflake stage."""
+    conn = None
+    cur = None
+    try:
+        # --- 1. Connect to Snowflake ---
+        print("Connecting to Snowflake...")
+        connect_params = {
+            'account': SNOWFLAKE_ACCOUNT,
+            'user': SNOWFLAKE_USER,
+            'role': SNOWFLAKE_ROLE,
+            'warehouse': SNOWFLAKE_WAREHOUSE,
+            'database': SNOWFLAKE_DATABASE,
+            'schema': SNOWFLAKE_SCHEMA
+        }
+        # Add authenticator or password based on choice
+        if 'SNOWFLAKE_PASSWORD' in globals() and SNOWFLAKE_PASSWORD:
+             print("Using password authentication.")
+             connect_params['password'] = SNOWFLAKE_PASSWORD
+        else:
+             # Default to password if authenticator is None and password variable exists
+             if 'SNOWFLAKE_PASSWORD' in globals() and SNOWFLAKE_PASSWORD:
+                  print("Using password authentication (default).")
+                  connect_params['password'] = SNOWFLAKE_PASSWORD
+             else:
+                  # Raise error if no valid auth method is configured
+                  raise ValueError("No valid authenticator or password configured.")
+
+
+        conn = snowflake.connector.connect(**connect_params)
+        cur = conn.cursor()
+        print("Connected.")
+
+        # --- 2. PUT the local file onto the stage ---
+        local_file_path = Path(local_file_path_str).resolve()
+        file_uri = local_file_path.as_uri()
+        # The stage name is used directly here as it's within the current database/schema context
+        put_sql = f"PUT {file_uri} @{stage_name}"
+        print(f"Executing PUT command for {local_file_path.name}...")
+        cur.execute(put_sql)
+        print("PUT command execution finished.")
+
+    except ValueError as ve:
+         # Catch configuration errors specifically
+         print(f"Configuration Error: {ve}")
+    except Exception as e:
+        # Catch other potential errors during connection or PUT
+        print(f"An error occurred: {e}")
+    finally:
+        # --- 3. Close resources ---
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+        print("Connection closed.")
+
+# --- Run the process ---
+if __name__ == "__main__":
+    # Check if the specified file exists before attempting upload
+    if not Path(LOCAL_CSV_FILE_PATH).is_file():
+         # Print error message if file not found
+         print(f"ERROR: CSV file not found at '{LOCAL_CSV_FILE_PATH}'. Please update the path.")
+    else:
+        # Proceed with upload if file exists
+        print("Starting Snowflake CSV upload...")
+        minimal_upload_to_stage(LOCAL_CSV_FILE_PATH, STAGE_NAME)
+        print("Upload process complete.")
+
