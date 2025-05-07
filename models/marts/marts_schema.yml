@@ -36,7 +36,7 @@ models:
       - name: cumulative_net_financial_balance_usd
         description: "The cumulative net balance in USD for the organization up to the end of this day."
         tests:
-          - not_null # Balance should always exist, even if 0
+          - not_null # Balance should always exist, even if 0, needed check
     tests:
       - dbt_utils.unique_combination_of_columns:
           combination_of_columns:
