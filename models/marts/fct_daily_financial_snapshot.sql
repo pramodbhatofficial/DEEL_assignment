@@ -63,8 +63,8 @@ date_spine AS (
     -- Step 6: Generate a continuous series of dates (the "spine").
     {{ dbt_utils.date_spine(
         datepart="day",
-        start_date="to_date('" ~ start_date_for_spine_value ~ "', 'YYYY-MM-DD')", -- Uses the dynamically fetched earliest date
-        end_date="CURRENT_DATE()" -- Ensures spine goes up to the current day
+        start_date="'" ~ start_date_for_spine_value ~ "'::date",
+        end_date="current_date()"
     ) }}
 ),
 
@@ -77,7 +77,7 @@ organization_daily_scaffold AS (
     CROSS JOIN organization_first_transaction_date oftd 
     WHERE 
         CAST(ds.date_day AS DATE) >= oftd.first_transaction_date 
-        AND CAST(ds.date_day AS DATE) <= CURRENT_DATE() 
+        AND CAST(ds.date_day AS DATE) <= current_date()
 ),
 
 final_dataset AS (
