@@ -1,0 +1,13 @@
+version: 2
+
+sources:
+  - name: src_public
+    database: src_data
+    schema: public
+    tables:
+      - name: organizations
+        identifier: ORGANIZATIONS
+        description: "Raw organizations data from Snowflake."
+      - name: invoices
+        identifier: INVOICES
+        description: "Raw invoices data from Snowflake."
