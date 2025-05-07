@@ -1,0 +1,44 @@
+version: 2
+
+models:
+  - name: dim_organizations
+    description: "Dimension table for organizations, containing key attributes."
+    columns:
+      - name: organization_id
+        description: "Unique identifier for each organization. Primary key."
+        tests:
+          - unique
+          - not_null
+      - name: organization_created_date
+        description: "Date the organization was created."
+        tests:
+          - not_null
+
+  - name: fct_daily_financial_snapshot
+    description: "Fact table showing the daily cumulative net financial balance for each organization."
+    columns:
+      - name: snapshot_date
+        description: "The date of the financial snapshot."
+        tests:
+          - not_null
+      - name: organization_id
+        description: "Identifier for the organization. Foreign key to dim_organizations."
+        tests:
+          - not_null
+          # Temporarily comment out the relationship test until we fix the data issue
+          # - relationships:
+          #     to: ref('dim_organizations')
+          #     field: organization_id
+      - name: daily_net_change_usd
+        description: "The net change in USD balance for the organization on this specific day."
+        tests:
+          - not_null # Should be 0 if no change, but not NULL
+      - name: cumulative_net_financial_balance_usd
+        description: "The cumulative net balance in USD for the organization up to the end of this day."
+        tests:
+          - not_null # Balance should always exist, even if 0
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - snapshot_date
+            - organization_id

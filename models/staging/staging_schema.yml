@@ -1,0 +1,52 @@
+version: 2
+
+models:
+  - name: stg_organizations
+    description: "Staged organizations data, cleaned and standardized from the source."
+    columns:
+      - name: organization_id
+        description: "Unique identifier for each organization."
+        tests:
+          - unique
+          - not_null
+      - name: legal_entity_country_code
+        description: "Numerical code for the organization's legal entity country."
+        tests:
+          - not_null # Assuming country code is mandatory
+      - name: organization_created_date 
+        description: "The date the organization record was created." # Adjust alias if needed
+        tests:
+          - not_null
+
+  - name: stg_invoices
+    description: "Staged invoices data, cleaned, standardized, with USD amounts calculated."
+    columns:
+      - name: invoice_id
+        description: "Unique identifier for each invoice."
+        tests:
+          - unique
+          - not_null
+      - name: organization_id
+        description: "Identifier for the organization associated with the invoice."
+        tests:
+          - not_null
+          # Optional: Add relationship test later once dim_organizations runs
+          # - relationships:
+          #     to: ref('dim_organizations')
+          #     field: organization_id
+      - name: status
+        description: "Status of the invoice."
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['paid', 'open', 'skipped', 'cancelled', 'pending', 'credited', 'processing', 'failed', 'refunded', 'unpayable', 'awaiting_payment']
+      - name: amount_usd
+        description: "Invoice amount converted to USD (used for credits/refunds)."
+        # Test that it's not null for relevant statuses in a data test later
+      - name: payment_amount_usd
+        description: "Payment amount converted to USD (used for paid)."
+        # Test that it's not null for 'paid' status in a data test later
+      - name: created_date
+        description: "Date the invoice was created."
+        tests:
+          - not_null
